@@ -1,0 +1,127 @@
+#include <GL/freeglut.h>
+#include <GL/gl.h>
+
+#include <iostream>
+#include "vec3f.h"
+#include <vector>
+
+using namespace std;
+
+//Globals
+int ww=500,wh=500;
+int count;
+
+class Vertex{
+	public:
+		Vec3f pos;
+		Vec3f velocity;
+		vector<Vec3f> force;
+		Vec3f netForce;
+	Vertex();
+	Vertex(float x, float y, float z);
+};
+
+Vertex::Vertex(){
+}
+
+Vertex::Vertex(float x, float y, float z)
+{
+		pos = Vec3f(x, y, z);
+}
+
+class Polygon{
+	public:
+		vector<Vertex> vertices;
+		Vec3f center;
+		bool use;
+	};
+
+Polygon p1;
+
+void myInit()
+{
+	glClearColor(1.0, 1.0, 1.0, 1.0);
+	count = 0;
+}
+
+void reshapeFunc(int w, int h)
+{
+	glMatrixMode( GL_PROJECTION );
+	glLoadIdentity();
+	ww = w;
+	wh = h;
+	glViewport(0.0, 0.0, ww, wh);
+	gluOrtho2D(0.0, ww, 0.0, wh);
+}
+
+void drawScene()
+{	
+	glColor3f(0.0, 0.0, 1.0);
+	glBegin( GL_LINES );
+
+	vector<Vertex>::iterator it = p1.vertices.begin();
+	float *vtemp;
+	if(p1.vertices.size() > 1)
+	{
+		vtemp = it->pos.v;
+		it++;
+		while(it!=p1.vertices.end())
+		{	
+		glVertex3fv(vtemp);
+		glVertex3fv(it->pos.v);
+		vtemp = it->pos.v;
+		it++;
+		}
+	}
+	else
+	{
+		glVertex3fv(vtemp);
+	}
+	
+	glEnd();
+}
+
+void displayFunc()
+{
+	glClear( GL_COLOR_BUFFER_BIT );
+
+	glColor3f(0.0, 0.0, 1.0);
+	drawScene();
+	glFlush();
+}
+
+void mouseFunc(int btn, int state, int x, int y)
+{
+	y = wh - y;		//remember must be inverted with height of window
+	if(btn == GLUT_LEFT_BUTTON && state == GLUT_DOWN )
+	{
+		Vertex v(x, y, 0.0);
+		p1.vertices.push_back(v);
+	}
+	else 	if(btn == GLUT_MIDDLE_BUTTON && state == GLUT_DOWN )
+	{
+		reshapeFunc(500.0, 500.0);
+	}
+	glutPostRedisplay();
+}
+
+void motionFunc( int x, int y)
+{
+
+}
+
+int main(int argc, char** argv)
+{
+	glutInit(&argc, argv);
+	glutInitWindowSize(ww,wh);
+	glutInitDisplayMode( GLUT_SINGLE | GLUT_RGB );
+	glutCreateWindow("spring system");
+	myInit();
+	glutReshapeFunc(reshapeFunc);
+	glutMouseFunc(mouseFunc);
+	glutDisplayFunc(displayFunc);
+	glutMotionFunc(motionFunc);
+	glutMainLoop();
+
+return 1;
+}
