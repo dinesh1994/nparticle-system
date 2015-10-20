@@ -7,7 +7,7 @@ Vec3f::Vec3f() {
 		
 }
 
-Vec3f::Vec3f(float x, float y, float z) {
+Vec3f::Vec3f(GLfloat x, GLfloat y, GLfloat z) {
 	v[0] = x;
 	v[1] = y;
 	v[2] = z;

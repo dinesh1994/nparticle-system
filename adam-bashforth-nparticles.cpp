@@ -25,8 +25,9 @@ Polygon p1;
 //functions
 bool checkEdge(int ,int );
 void insertEdges();
+void drawScene();
 
-Vec3f computeForce(int index, int size, Vertex *vtemp)
+Vec3f computeForce(int index, int size, Vertex vtemp)
 {
     //calculating forces for every adjacent vertices
     for(int i=0;i<p1.edges[index].size();i++)
@@ -36,7 +37,7 @@ Vec3f computeForce(int index, int size, Vertex *vtemp)
       Vec3f fdir;
       float l;
 
-      fdir = vtemp->pos - p1.vertices[adj].pos;
+      fdir = vtemp.pos - p1.vertices[adj].pos;
       l = fdir.magnitude();     //current length of spring
       fdir = fdir.normalize();   //converting to unit dir vector of force1
 
@@ -44,55 +45,120 @@ Vec3f computeForce(int index, int size, Vertex *vtemp)
       force = (-K*(l - L))*(fdir);
 
       //calculating friction force friction = -k*velocity
-      Vec3f dVelo = vtemp->velocity - p1.vertices[adj].velocity;
+      Vec3f dVelo = vtemp.velocity - p1.vertices[adj].velocity;
 
       friction = (-u*dVelo.dot(fdir))*fdir;
 
       //saving the forces
 
-      vtemp->forces.push_back(force);
-      vtemp->forces.push_back(friction);
+      vtemp.forces.push_back(force);
+      vtemp.forces.push_back(friction);
     }
 
-    vector<Vec3f>::iterator it = vtemp->forces.begin();
-    while(it!=vtemp->forces.end())
+    vector<Vec3f>::iterator it = vtemp.forces.begin();
+    while(it!=vtemp.forces.end())
     {
-      vtemp->netForce += *it;
+      vtemp.netForce += *it;
       it++;
     }
-    return vtemp->netForce;
+    return vtemp.netForce;
 }
 
+/*          Calculating Initial values of Adams-Bashforth Method    */
+Vec3f F[4];
+Vec3f V[4];
+void InitValueOfF(int i)
+{
+        Vertex vtemp = p1.vertices[i];       //Copy of ith body for intermediate processing
+        Vertex &ptr = p1.vertices[i];      //Pointer to ith vertices
+        V[0] = vtemp.velocity;
+        F[0] = computeForce( i, p1.vertices.size(), vtemp);
+
+        for(int j=1;j<4;j++)
+        {
+            Vec3f KF1,KF2,KV1,KV2;
+            KV1 = vtemp.velocity;
+            KF1 = computeForce(i, p1.vertices.size(),vtemp);
+
+            //updating velocity v = u + at
+            vtemp.velocity += (STEPSIZE*vtemp.netForce);
+            KV2 = vtemp.velocity;
+
+            //updating position of Vertex
+            vtemp.pos += (STEPSIZE*KV1);
+
+            KF2 = computeForce(i, p1.vertices.size(),vtemp);
+
+            //Applying RK-2
+            ptr.velocity += STEPSIZE/2*(KF1+KF2);
+            ptr.pos += STEPSIZE/2*(KV1+KV2);
+            V[j] = ptr.velocity;
+            F[j] = computeForce(i, p1.vertices.size(),ptr);
+            //displayFunc();
+            drawScene();
+        }
+
+        for(int p=0;p<4;p++)
+        {
+          ptr.forces.push_back(F[p]);
+          cout<<"V["<<p<<"] = "<<(cout,V[p])<<endl;
+          cout<<"F["<<p<<"] ="<<(cout,F[p])<<endl;
+        }    
+        //cout<<endl<<"Force vec size of vtemp "<<i<<" = "<<p1.vertices[i].forces.size()<<endl;
+}
+
+/*          Adam Bashforth Predictor and Corrector Method      */
 void update(int value)
 { //press s key for starting n stopping simulation
-  if(simulation) {
-  int index = 0;
-  int size = p1.vertices.size();
-  while(index<size && size>1)
+  if(simulation) 
   {
-    Vertex vtemp = p1.vertices[index];
-    Vec3f KF1,KF2,KV1,KV2;
+    int index = 0;
+    int size = p1.vertices.size();
+    while(index<size && size>1)
+    {
+      Vertex vtemp = p1.vertices[index];
+      if(vtemp.forces.empty())
+          {
+            cout<<endl<<"Force vec size of vtemp "<<index<<" = "<<vtemp.forces.size()<<endl;
+            InitValueOfF(index);
+            if(p1.vertices[index].forces.size()<4)
+            {
+                cout<<endl<<"Insufficient Data for Predicting for vtemp - "<<index<<endl;
+                exit(0);    //exit the system
+            }
+          }
+          else
+          {
+            vector<Vec3f> F = p1.vertices[index].forces;
+            // Predictor yk+1 = yk + h/24( -9fk-3 + 37fk-2 - 59fk-1 + 55fk) 
+            
+            vtemp.velocity += STEPSIZE/24*( (-9*F[0]) + (37*F[1]) - (59*F[2]) + (55*F[3]));
+            vtemp.pos +=      STEPSIZE/24*( (-9*V[0]) + (37*V[1]) - (59*V[2]) + (55*V[3]));         //Using euler for prediction position
+            
+            Vec3f fp = computeForce(index, p1.vertices.size(),vtemp);
+            Vec3f vp = vtemp.velocity;
+            
+            //Corrector yk+1 = yk + h/24( fk-2 -5fk-1 + 19fk + 9f(pyk+1)) 
+            p1.vertices[index].velocity += STEPSIZE/24*( F[1] - (5*F[2]) + (19*F[3]) + (9*fp));
+            p1.vertices[index].pos +=      STEPSIZE/24*( V[1] - (5*V[2]) + (19*V[3]) + (9*vp));
 
-    KV1 = vtemp.velocity;
-    KF1 = computeForce(index, size, &vtemp);
-
-    //updating velocity v = u + at
-    vtemp.velocity += (STEPSIZE*vtemp.netForce);
-    KV2 = vtemp.velocity;
-
-    //updating position of Vertex
-    vtemp.pos += (STEPSIZE*vtemp.velocity);
-
-    KF2 = computeForce(index, size, &vtemp);
-
-    //Applying RK-2
-    p1.vertices[index].velocity += STEPSIZE/2*(KF1+KF2);
-    p1.vertices[index].pos += STEPSIZE/2*(KV1+KV2);
-
-    index++;
+            //updating values of last 4 Steps
+            for(int j=0;j<3;j++)    
+            {
+                p1.vertices[index].forces[j] = F[j+1];
+                V[j] = V[j+1];
+            }
+            p1.vertices[index].forces[3] = computeForce(index, p1.vertices.size(),p1.vertices[index]);
+            V[3] = p1.vertices[index].velocity;
+            cout<<"Force at index"<<index<<"\t"<<(cout,p1.vertices[index].forces[3])<<endl;
+            cout<<"Velocity at index"<<index<<"\t"<<(cout,p1.vertices[index].velocity)<<endl;            
+        }
+//p1.vertices[index].pos += STEPSIZE
+      index++;
+    }
   }
-  }
-  else if(picking && moving){
+  else if(picking && moving)
+  {
     vector<Vertex>::iterator it = p1.vertices.begin();
     while(it!=p1.vertices.end())
     {
@@ -108,17 +174,17 @@ void update(int value)
 
 void myInit()
 {
-	glClearColor(1.0, 1.0, 1.0, 1.0);
+  glClearColor(1.0, 1.0, 1.0, 1.0);
 }
 
 void reshapeFunc(int w, int h)
 {
-	glMatrixMode( GL_PROJECTION );
-	glLoadIdentity();
-	ww = w;
-	wh = h;
-	glViewport(0.0, 0.0, ww, wh);
-	gluOrtho2D(0.0, ww, 0.0, wh);
+  glMatrixMode( GL_PROJECTION );
+  glLoadIdentity();
+  ww = w;
+  wh = h;
+  glViewport(0.0, 0.0, ww, wh);
+  gluOrtho2D(0.0, ww, 0.0, wh);
 }
 
 void drawScene()
@@ -141,11 +207,11 @@ void drawScene()
 
 void displayFunc()
 {
-	glClear( GL_COLOR_BUFFER_BIT );
+  glClear( GL_COLOR_BUFFER_BIT );
 
-	glColor3f(0.0, 0.0, 1.0);
-	drawScene();
-	glFlush();
+  glColor3f(0.0, 0.0, 1.0);
+  drawScene();
+  glFlush();
 }
 
 bool compare(vertexIt a, vertexIt b)
@@ -205,7 +271,6 @@ void mouseFunc(int btn, int state, int x, int y)
     }
   glutPostRedisplay();
 }
-
 
 void motionFunc( int x, int y)
 {
@@ -285,11 +350,11 @@ void keyboardFunc(unsigned char key, int x, int y)
     switch(key)
     {
       case 'e'://enter edges in polygon
-              {
+            {
                 simulation = false;
                 insertEdges();
-              break;
-              }
+            break;
+                }
       case 'a':
               if(pickList.empty()) break;
               for(int i=0;i<pickList.size();i++)
@@ -322,15 +387,15 @@ void keyboardFunc(unsigned char key, int x, int y)
 
 int main(int argc, char** argv)
 {
-	glutInit(&argc, argv);
-	glutInitWindowSize(ww,wh);
-	glutInitDisplayMode( GLUT_SINGLE | GLUT_RGB );
-	glutCreateWindow("spring system using Rune Kutta 2");
-	myInit();
-	glutReshapeFunc(reshapeFunc);
-	glutMouseFunc(mouseFunc);
-	glutDisplayFunc(displayFunc);
-	glutMotionFunc(motionFunc);
+  glutInit(&argc, argv);
+  glutInitWindowSize(ww,wh);
+  glutInitDisplayMode( GLUT_SINGLE | GLUT_RGB );
+  glutCreateWindow("spring system using Adams-Bashforth-Moulton 4steps");
+  myInit();
+  glutReshapeFunc(reshapeFunc);
+  glutMouseFunc(mouseFunc);
+  glutDisplayFunc(displayFunc);
+  glutMotionFunc(motionFunc);
   glutKeyboardFunc(keyboardFunc);
 
   glutTimerFunc(15, update, 0);

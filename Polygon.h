@@ -5,6 +5,8 @@
 class Polygon{
 	public:
 		vector<Vertex> vertices;
+		//vector<vector<Vertex*> > edges;
+		vector<vector<int> > edges;
 		Vec3f center;
 		bool use;
 	Polygon();

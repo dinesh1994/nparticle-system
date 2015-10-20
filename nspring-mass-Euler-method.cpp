@@ -15,72 +15,82 @@ bool moving = false;
 bool simulation = false;
 float K = 0.01;
 float L = 100.0;
-float STEPSIZE = 0.1;
+float STEPSIZE = 0.001;
 float energyLoss = 0.8;
 float u = 0.1;                  //coefficient of friction
-float camx=0.0,camy=0.0,camz=0.0,lx=0.0,ly=0.0,lz=-1.0;
-float camAngle=0.0,speed=0.1;
 typedef vector<Vertex>::iterator vertexIt;
 vector<vertexIt> pickList;
 
 Polygon p1;
+//functions
+bool checkEdge(int ,int );
+void insertEdges();
+
+Vec3f computeForce(int index, int size, Vertex *vtemp)
+{
+    //calculating forces for every adjacent vertices
+    for(int i=0;i<p1.edges[index].size();i++)
+    {
+      int adj = p1.edges[index][i]-1;
+      Vec3f force,friction;
+      Vec3f fdir;
+      float l;
+
+      fdir = vtemp->pos - p1.vertices[adj].pos;
+      l = fdir.magnitude();     //current length of spring
+      fdir = fdir.normalize();   //converting to unit dir vector of force1
+
+      //calculating force i.e -k*(dx)*unitVector
+      force = (-K*(l - L))*(fdir);
+
+      //calculating friction force friction = -k*velocity
+      Vec3f dVelo = vtemp->velocity - p1.vertices[adj].velocity;
+
+      friction = (-u*dVelo.dot(fdir))*fdir;
+
+      //saving the forces
+
+      vtemp->forces.push_back(force);
+      vtemp->forces.push_back(friction);
+    }
+
+    vector<Vec3f>::iterator it = vtemp->forces.begin();
+    while(it!=vtemp->forces.end())
+    {
+      vtemp->netForce += *it;
+      it++;
+    }
+    return vtemp->netForce;
+}
 
 void update(int value)
 { //press s key for starting n stopping simulation
-  if(simulation) {
-  int index = 0;
-  int size = p1.vertices.size();
-  while(index!=size && size>1)
+  if(simulation) 
   {
-    int adjVer1,adjVer2;
-    index == 0 ? adjVer1 = size-1 : adjVer1 = index-1;
-    index == size-1 ? adjVer2 = 0 : adjVer2 = index+1;
-    Vec3f force1,force2,friction;
-    Vec3f f1dir,f2dir;
-    float l1,l2;
-
-    f1dir = Vec3f(((p1.vertices[index].pos.v[0]-p1.vertices[adjVer1].pos.v[0])),
-                   ((p1.vertices[index].pos.v[1]-p1.vertices[adjVer1].pos.v[1])),
-                    0.0);
-    f2dir = Vec3f(((p1.vertices[index].pos.v[0]-p1.vertices[adjVer2].pos.v[0])),
-                   ((p1.vertices[index].pos.v[1]-p1.vertices[adjVer2].pos.v[1])),
-                   0.0);
-
-    l1 = f1dir.magnitude();     //current length of spring1
-    l2 = f2dir.magnitude();     //current length of spring2
-
-    f1dir = f1dir.normalize();   //converting to unit dir vector of force1
-    f2dir = f2dir.normalize();   //converting to unit dir vector of force2
-
-    //calculating force i.e k*(dx)*unitVector
-    force1 = (-K*(l1 - L))*(f1dir);
-    force2 = (-K*(l2 - L))*(f2dir);
-
-    //calculating friction force friction = -k*velocity
-    Vec3f dVelo1 = Vec3f(p1.vertices[index].velocity-p1.vertices[adjVer1].velocity);
-    Vec3f dVelo2 = Vec3f(p1.vertices[index].velocity-p1.vertices[adjVer2].velocity);
-
-    friction = (((-u*dVelo1.dot(f1dir))*f1dir)+((-u*dVelo2.dot(f2dir))*f2dir));
-
-    p1.vertices[index].forces.push_back(force1);
-    p1.vertices[index].forces.push_back(force2);
-    p1.vertices[index].forces.push_back(friction);
-
-    vector<Vec3f>::iterator it = p1.vertices[index].forces.begin();
-    while(it!=p1.vertices[index].forces.end())
+    int index = 0;
+    int size = p1.vertices.size();
+    while(index!=size && size>1)
     {
-      p1.vertices[index].netForce += *it;
+
+      Vec3f force = computeForce(index,size,&p1.vertices[index]);
+      //updating velocity v = u + at
+      p1.vertices[index].velocity += STEPSIZE*force*energyLoss;
+
+      //updating position of Vertex
+      p1.vertices[index].pos += STEPSIZE*p1.vertices[index].velocity;
+
+      index++;
+    }
+  }
+  else if(picking && moving)
+  {
+    vector<Vertex>::iterator it = p1.vertices.begin();
+    while(it!=p1.vertices.end())
+    {
+      it->netForce = Vec3f(0.0, 0.0, 0.0);
+      it->velocity = Vec3f(0.0, 0.0, 0.0);
       it++;
     }
-
-    //updating velocity v = u + at
-    p1.vertices[index].velocity += STEPSIZE*p1.vertices[index].netForce*energyLoss;
-
-    //updating position of Vertex
-    p1.vertices[index].pos += STEPSIZE*p1.vertices[index].velocity;
-
-    index++;
-  }
   }
   glutPostRedisplay();
 
@@ -112,42 +122,31 @@ void reshapeFunc(int w, int h)
 
 void drawScene()
 {
-	glBegin( GL_LINE_LOOP );
+  glColor3f(0.0, 0.0, 1.0);
+  glBegin( GL_LINES );
 
-	vector<Vertex>::iterator it = p1.vertices.begin();
-	float *vtemp;
-	if(p1.vertices.size() > 1)
-	{
-		vtemp = it->pos.v;
-		it++;
-		while(it!=p1.vertices.end())
-		{
-		glVertex3fv(vtemp);
-		glVertex3fv(it->pos.v);
-		vtemp = it->pos.v;
-		it++;
-		}
-	}
-	else if(p1.vertices.size() ==1 )
-	{
-		glVertex3fv(p1.vertices[0].pos.v);
-	}
+        for(int i=0;i<p1.edges.size();i++)
+        {
+            for(int j=0;j<p1.edges[i].size();j++)
+           {
+                int edge = p1.edges[i][j]-1;
+                glVertex3fv(p1.vertices[i].pos.v);
+                glVertex3fv(p1.vertices[edge].pos.v);
+            }
+        }
 
-	glEnd();
+  glEnd();
 }
 
 void displayFunc()
 {
   glClear( GL_COLOR_BUFFER_BIT );
-	glColor3f(0.0, 0.0, 1.0);
 
-	glMatrixMode( GL_MODELVIEW );
-	glLoadIdentity();
-
-  	drawScene();
-	glFlush();
-  glutSwapBuffers();
+  glColor3f(0.0, 0.0, 1.0);
+  drawScene();
+  glFlush();
 }
+
 
 bool compare(vertexIt a, vertexIt b)
 {
@@ -178,50 +177,121 @@ void generatePickList(int x, int y)
 
 void mouseFunc(int btn, int state, int x, int y)
 {
-	y = wh - y;		//remember must be inverted with height of window
-	if(btn == GLUT_LEFT_BUTTON && state == GLUT_DOWN && !picking && !moving && manualDraw )
-	{
-		Vertex v(x, y, 0.0);
-		p1.vertices.push_back(v);
-	}
-	else 	if(btn == GLUT_MIDDLE_BUTTON && state == GLUT_DOWN && !picking && !moving && manualDraw )
-	{
-		picking = true;
-    moving = true;
-    generatePickList(x, y);
+  y = wh - y;   //remember must be inverted with height of window
+  if(btn == GLUT_LEFT_BUTTON && state == GLUT_DOWN && !picking && !moving && manualDraw )
+  {
+    Vertex v(x, y, 0.0);
+    cout<<(cout,v.pos)<<endl;
+    p1.vertices.push_back(v);
+    p1.edges.push_back(vector<int> (0));
+    cout<<p1.edges.back().size()<<endl;
+
+    do   //insert atleast one edges to particles
+    {
+            if(p1.edges.size()<2)
+                break;
+            insertEdges();
+            if(p1.edges.back().empty())
+                cout<<"Insert Atleast 1 edge for new vertex "<<p1.vertices.size()<<endl;
+            else
+                break;
+    }while(1);
   }
-	glutPostRedisplay();
+  else if(btn == GLUT_MIDDLE_BUTTON && state == GLUT_DOWN && !picking && !moving && manualDraw )
+  {
+    picking = true;
+        moving = true;
+        generatePickList(x, y);
+    }
+  glutPostRedisplay();
 }
 
 void motionFunc( int x, int y)
 {
-  if(picking && moving && !pickList.empty()){
-  y = wh - y;
-  int index = pickList.size()-1;
-  pickList[index]->pos = Vec3f(x, y, 0);
-  glutPostRedisplay();
+  if(picking && moving && !pickList.empty())
+  {
+    y = wh - y;
+    int index = pickList.size()-1;
+    pickList[index]->pos = Vec3f(x, y, 0);
+    glutPostRedisplay();
   }
 }
 
 void clearScene()
 {
+  glClear(GL_COLOR_BUFFER_BIT);
+  glutSwapBuffers();
+  glFlush();
   picking = false;
   moving = false;
   simulation = false;
   p1.vertices.erase(p1.vertices.begin(),p1.vertices.end());
+  p1.edges.erase(p1.edges.begin(),p1.edges.end());
   pickList.erase(pickList.begin(), pickList.end());
   cout<<"picking = "<<picking<<"\t moving = "<<moving<<"\t simulation = "<<simulation<<"\n";
   cout<<"scene cleared !!"<<"\n";
   glutPostRedisplay();
 }
 
+bool checkEdge(int a, int b)
+{
+  vector<int>::iterator it1 = find(p1.edges[a-1].begin(), p1.edges[a-1].end(), b);
+  vector<int>::iterator it2 = find(p1.edges[b-1].begin(), p1.edges[b-1].end(), a);
+
+  if(it1==p1.edges[a-1].end() && it2==p1.edges[b-1].end())
+    return false;
+
+  return true;
+}
+
+void insertEdges()
+{
+    if(p1.vertices.size()<2)
+              {
+                cout<<"Insufficient or no vertices to insert an edge"<<endl;
+                return;
+              }
+              cout<<"Enter two vertices out of following:(enter 0 0 for exit)"<<endl;
+              int vertices = p1.vertices.size();
+              for(int i=1;i<=vertices;i++)
+                  cout<<i<<" ";
+              cout<<endl;
+              int a,b;
+              cin.clear();
+              cin>>a>>b;
+              while(a!=0&&b!=0)
+              {
+                if(a>vertices||b>vertices||a<1||b<1||a==b)
+                  cout<<"Enter vertices form 1 to"<<vertices<<endl;
+                else
+                {   //checking if edge already exists
+                    if(!checkEdge(a,b))
+                    {
+                      p1.edges[a-1].push_back(b);
+                      p1.edges[b-1].push_back(a);
+                      cout<<"Edge inserted btwn "<<a<<"-"<<b<<endl;
+                      glutPostRedisplay();          //displaying the inserted edges
+                    }
+                    else
+                      cout<<"edge already exists"<<endl;
+                }
+                cin>>a>>b;
+              }
+              cout<<"Exiting loop"<<endl;
+}
+
+
 void keyboardFunc(unsigned char key, int x, int y)
 {
     switch(key)
     {
-
-
-      case 'b':
+      case 'e'://enter edges in polygon
+            {
+                simulation = false;
+                insertEdges();
+            break;
+                }
+      case 'a':
               if(pickList.empty()) break;
               for(int i=0;i<pickList.size();i++)
               {
@@ -239,7 +309,7 @@ void keyboardFunc(unsigned char key, int x, int y)
       case 'x':
               cout<<pickList.size();
               break;
-      case 'v':
+      case 's':
               simulation ? simulation=false : simulation=true;
               cout<<simulation<<"\n";
               break;
@@ -250,7 +320,6 @@ void keyboardFunc(unsigned char key, int x, int y)
               exit(0);
     }
 }
-
 
 int main(int argc, char** argv)
 {

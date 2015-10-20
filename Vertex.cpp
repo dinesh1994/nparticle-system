@@ -1,6 +1,6 @@
 #include "Vertex.h"
 
-int verticeCount;
+int verticeCount=0;
 
 int Vertex::getId(){ return id; }
 
@@ -19,4 +19,3 @@ Vertex::Vertex(float x, float y, float z)
     netForce = Vec3f(0.0, 0.0, 0.0);
     velocity = Vec3f(0.0, 0.0, 0.0);
 }
-
